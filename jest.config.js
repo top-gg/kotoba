@@ -1,8 +1,12 @@
 module.exports = {
-  name: "typescript-starter",
-  preset: "ts-jest",
-  automock: false,
+  name: "kotoba",
+  // preset: "ts-jest",
+  // automock: false,
   collectCoverage: true,
-  reporters: ["default", "jest-junit"],
-  testPathIgnorePatterns: ["dist/.*"],
+  // reporters: ["default", "jest-junit"],
+  testPathIgnorePatterns: ["dist/.*", "node_modules"],
+  maxWorkers: 1,
+  transform: {
+    "src/.+\\.(t|j)sx?$": "@swc/jest",
+  },
 }

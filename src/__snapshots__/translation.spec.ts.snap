@@ -1,0 +1,23 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`translation generation fails on invalid directory generation 1`] = `
+Object {
+  "_tag": "Left",
+  "left": Object {
+    "path": "src/__fixtures__/mixed/en_invalid/subdirectory/invalid_nested.json",
+    "type": "empty_object",
+  },
+}
+`;
+
+exports[`translation generation generates translations for valid en 1`] = `
+Object {
+  "_tag": "Right",
+  "right": Object {
+    "lmao": "golang users",
+    "other.nested.keys": "there",
+    "some.nested.keys": "here",
+    "stan": "dreamcatcher",
+  },
+}
+`;

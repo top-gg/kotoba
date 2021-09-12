@@ -5,22 +5,34 @@
   "main": "dist/index.js",
   "scripts": {
     "test": "jest",
-    "build": "tsc --skipLibCheck --incremental",
+    "build": "swc src -d dist",
     "dev": "nodemon",
     "start": "node dist/index.js"
   },
   "author": "xetera",
   "license": "MIT",
   "dependencies": {
-    "@types/jest": "^27.0.1",
-    "@types/node": "^16.9.1",
-    "@types/winston": "^2.4.4",
+    "@formatjs/icu-messageformat-parser": "^2.0.11",
+    "cmd-ts": "^0.7.0",
     "dotenv": "^10.0.0",
+    "fast-glob": "^3.2.7",
+    "fp-ts": "^2.11.1",
+    "glob": "^7.1.7",
+    "lodash": "^4.17.21",
     "make-promises-safe": "^5.1.0",
+    "ts-morph": "^12.0.0",
     "typescript": "^4.4.3",
     "winston": "^3.2.1"
   },
   "devDependencies": {
+    "@swc/cli": "^0.1.49",
+    "@swc/core": "^1.2.85",
+    "@swc/jest": "^0.2.3",
+    "@types/glob": "^7.1.4",
+    "@types/jest": "^27.0.1",
+    "@types/lodash": "^4.14.172",
+    "@types/node": "^16.9.1",
+    "@types/winston": "^2.4.4",
     "@typescript-eslint/eslint-plugin": "^4.31.0",
     "@typescript-eslint/parser": "^4.31.0",
     "eslint": "^7.32.0",
@@ -30,9 +42,7 @@
     "jest": "^27.1.1",
     "jest-junit": "^12.2.0",
     "nodemon": "^2.0.12",
-    "prettier": "^2.4.0",
-    "ts-jest": "^27.0.5",
-    "ts-node": "^10.2.1"
+    "prettier": "^2.4.0"
   },
   "jest-junit": {
     "outputDirectory": "coverage"
