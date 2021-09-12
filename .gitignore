@@ -1,0 +1,8 @@
+dist/
+node_modules/
+coverage/
+.cache/
+.env
+junit.xml
+yarn-error.log
+tsconfig.tsbuildinfo
