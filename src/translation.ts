@@ -1,9 +1,11 @@
-import { Either, isRight, left, right } from "fp-ts/lib/Either"
+import { Either, isLeft, isRight, left, right } from "fp-ts/lib/Either"
 import { isSome, none, Option, some } from "fp-ts/lib/Option"
 import glob from "fast-glob"
 import { join } from "path"
 import { promises as fs } from "fs"
 import { logger } from "./logger"
+import { ParseError } from "./parser"
+import { TypeGenerationError } from "./typegen"
 
 type JSONPrimitive = string | number | boolean | null
 type JSONValue = JSONPrimitive | JSONObject | JSONArray
@@ -12,29 +14,18 @@ interface JSONArray extends Array<JSONValue> {}
 
 export type Translations = Record<string, string>
 
-export type FlatteningError =
-  | { type: "empty_object"; path: string }
-  | { type: "unexpected_value"; path: string; value: JSONValue }
+export type FlatteningErrorWithoutFile =
+  | { type: "emptyObject"; path: string }
+  | { type: "unexpectedValue"; path: string; value: JSONValue }
+
+export type FlatteningError = FlatteningErrorWithoutFile & { file: string }
 
 const DEFAULT_KEY_DELIMITER = "."
 
 export type TranslationGenerationError =
   | FlatteningError
-  | {
-      type: "invalid_json_file"
-      contents: string
-      path: string
-    }
-  | {
-      type: "empty_object"
-      path: string
-    }
-  | {
-      type: "clashing_key"
-      keyPath: string
-      declaredIn: string
-      reusedIn: string
-    }
+  | ParseError
+  | TypeGenerationError
 
 function excludeGenerated(
   files: string[],
@@ -52,7 +43,7 @@ function excludeGenerated(
 export function flattenTranslation(
   declarations: JSONObject,
   prefix: Option<string> = none
-): Either<FlatteningError, Translations> {
+): Either<FlatteningErrorWithoutFile, Translations> {
   let translations: Translations = {}
 
   for (const [key, value] of Object.entries(declarations)) {
@@ -61,7 +52,7 @@ export function flattenTranslation(
       : key
 
     const invalidValue = (value: JSONValue) =>
-      left({ type: "unexpected_value", path, value } as const)
+      left({ type: "unexpectedValue", path, value } as const)
 
     if (typeof value === "string") {
       translations[path] = value
@@ -74,7 +65,7 @@ export function flattenTranslation(
       // disposing of the key itself. This is almost always a programmer mistake
       // so it should be handled as an error
       if (Object.keys(value).length === 0) {
-        return left({ type: "empty_object", path })
+        return left({ type: "emptyObject", path })
       }
 
       const next = flattenTranslation(value, some(path))
@@ -95,22 +86,6 @@ export function flattenTranslation(
   return right(translations)
 }
 
-function findEmptyObject(obj: Record<string, any>): string | undefined {
-  function go(obj: Record<string, any>, paths: string[]): string | undefined {
-    for (const key of Object.keys(obj)) {
-      if (typeof obj[key] === "object") {
-        const currentPath = [...paths, key]
-        if (Object.keys(obj[key]).length === 0) {
-          return currentPath.join(".")
-        }
-        return go(obj[key], currentPath)
-      }
-    }
-  }
-
-  return go(obj, [])
-}
-
 type TopLevelKeys = Record<string, string>
 
 export async function generateTranslations(
@@ -122,7 +97,7 @@ export async function generateTranslations(
     excludeGenerated(files, rootFolder)
   )
   const topLevelKeys: TopLevelKeys = {}
-  let out: JSONObject = {}
+  let out: Translations = {}
 
   function overlappingSourceKey(key: string): string | undefined {
     for (const [existingKey, source] of Object.entries(topLevelKeys)) {
@@ -134,32 +109,21 @@ export async function generateTranslations(
 
   for (const file of files) {
     const fileStr = await fs.readFile(file, "utf-8")
-    let translations
+    let translations: JSONObject
     try {
       translations = JSON.parse(fileStr)
     } catch (err) {
       if (err instanceof Error && err.name === "SyntaxError") {
         return left({
-          type: "invalid_json_file",
+          type: "invalidJsonFile",
           contents: fileStr,
-          path: file,
+          file,
         })
       } else {
         logger.error(err)
       }
+      // TODO: remove this panic
       return process.exit(1)
-    }
-
-    const maybeEmptyObjectKey = findEmptyObject(translations)
-
-    if (maybeEmptyObjectKey) {
-      return left({
-        type: "empty_object",
-        path: file,
-      })
-      // throw Error(
-      //   `Source string "${maybeEmptyObjectKey}" in ${file} is an empty object. All translations must be valid key-value mappings.
-      // )
     }
 
     // we only need to check the top level because that's where the translations
@@ -168,18 +132,24 @@ export async function generateTranslations(
       const maybeDuplicateKeySource = overlappingSourceKey(key)
       if (maybeDuplicateKeySource) {
         return left({
-          type: "clashing_key",
+          type: "clashingKey",
           keyPath: key,
           reusedIn: file,
           declaredIn: maybeDuplicateKeySource,
+          // just to satisfy the interface
+          file,
         })
-        // throw Error(
-        //   `Top-level key "${key}" in ${file} already exists in ${maybeDuplicateKeySource}. https://www.notion.so/Internationalization-43ce8c6742a04a75a3afd3daf89128eb#d6b644a33d7e49808bb8cc7576454e5b`
-        // )
       }
       topLevelKeys[key] = file
     }
-    out = { ...out, ...translations }
+    const values = flattenTranslation(translations)
+    if (isLeft(values)) {
+      return left({
+        ...values.left,
+        file,
+      })
+    }
+    out = { ...out, ...values.right }
   }
-  return flattenTranslation(out)
+  return right(out)
 }

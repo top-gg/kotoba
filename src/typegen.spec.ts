@@ -1,16 +1,20 @@
-import { parseTypes } from "./parser"
+import { right } from "fp-ts/lib/Either"
 import { generateTypings } from "./typegen"
 
-describe("typegeneration", () => {
-  it("produces correct output", () => {
-    generateTypings(
+describe("type generation", () => {
+  it("produces output without crashing", async () => {
+    const result = await generateTypings(
       {
-        name: "string",
-        out: '"memes" | "nice"',
+        name: { a: "a", b: "b" },
+        out: {
+          a: '"a" | "b"',
+        },
+        something: {},
       },
       {
-        destination: "./example",
+        destination: "./dist/example",
       }
     )
+    expect(result).toStrictEqual(right(undefined))
   })
 })

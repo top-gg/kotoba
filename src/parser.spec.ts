@@ -1,15 +1,15 @@
 import { isLeft, isRight } from "fp-ts/lib/Either"
 import {
   DATE_TYPE,
-  generateTypings,
+  parseTypes,
   NUMBER_TYPE,
   REACT_NODE_TYPE,
   STRING_TYPE,
   TAG_MAPPER_TYPE,
-} from "./typegen"
+} from "./parser"
 
 const typedAs = (text: string, o: unknown) => {
-  const input = generateTypings(text, "")
+  const input = parseTypes(text, "")
   if (isLeft(input)) {
     throw input
   }
@@ -17,7 +17,7 @@ const typedAs = (text: string, o: unknown) => {
 }
 
 const erroredAs = (text: string, o: unknown) => {
-  const input = generateTypings(text, "")
+  const input = parseTypes(text, "")
   if (isRight(input)) {
     throw input
   }
@@ -54,7 +54,7 @@ describe("type generation", () => {
     typedAs(
       "Top voted {type, select, bot {bots} server {servers} other {}} on Top.gg",
       {
-        type: '"bot" | "server"',
+        type: ["bot", "server"],
       }
     )
   })
@@ -74,7 +74,7 @@ describe("type generation", () => {
     erroredAs(
       "Are you sure you want to permanently delist and delete <b>{entityName}</b> from Top.gg?",
       {
-        type: "replace_tag_and_argument_with_argument",
+        type: "replaceComplexTag",
         key: "",
         tagName: "b",
         argumentName: "entityName",

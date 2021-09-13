@@ -4,7 +4,7 @@ import { flattenTranslation, generateTranslations } from "./translation"
 describe("flattening translations", () => {
   it("warns on empty objects", () => {
     const a = flattenTranslation({ key: { other: {} } })
-    expect(a).toEqual(left({ type: "empty_object", path: "key.other" }))
+    expect(a).toEqual(left({ type: "emptyObject", path: "key.other" }))
   })
   it("warns on invalid values", () => {
     const object = {
@@ -14,7 +14,7 @@ describe("flattening translations", () => {
     }
     expect(flattenTranslation(object)).toEqual(
       left({
-        type: "unexpected_value",
+        type: "unexpectedValue",
         path: "stan.dreamcatcher",
         value: 1,
       })

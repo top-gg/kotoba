@@ -6,8 +6,6 @@ import {
   TYPE,
 } from "@formatjs/icu-messageformat-parser"
 import { Either, right, left, isLeft } from "fp-ts/lib/Either"
-import { format } from "prettier"
-import { promises as fs } from "fs"
 
 export const REACT_NODE_TYPE = "ReactNode"
 export const STRING_TYPE = "string"
@@ -15,28 +13,38 @@ export const TAG_MAPPER_TYPE = "TagMapper"
 export const NUMBER_TYPE = "number"
 export const DATE_TYPE = "Date"
 
-export type Types = Record<string, string>
+export type TranslationArguments = Record<string, string | string[]>
 
-type TypeGenerationError =
-  | { type: "missing_other_branch"; path: string }
-  | { type: "tag_syntax"; input: string }
-  | { type: "tag_mismatch"; input: string }
+export type ParseErrorWithoutFile =
   | {
-      type: "replace_tag_and_argument_with_argument"
+      type: "invalidJsonFile"
+      contents: string
+    }
+  | {
+      type: "clashingKey"
+      keyPath: string
+      declaredIn: string
+      reusedIn: string
+    }
+  | { type: "missingOtherBranch"; path: string }
+  | {
+      type: "replaceComplexTag"
       tagName: string
       argumentName: string
       key: string
     }
 
+export type ParseError = ParseErrorWithoutFile & { file: string }
+
 const extractTypeFromElement = (
   elem: MessageFormatElement,
   key: string
-): Either<TypeGenerationError, Types> => {
-  let out: Types = {}
+): Either<ParseErrorWithoutFile, TranslationArguments> => {
+  let out: TranslationArguments = {}
 
   const parseOutBranchesImpurely = (
     options: PluralOrSelectOption | MessageFormatElement[]
-  ): TypeGenerationError | undefined => {
+  ): ParseErrorWithoutFile | undefined => {
     for (const child of "value" in options ? options.value : options) {
       const nested = extractTypeFromElement(child, key)
 
@@ -59,7 +67,7 @@ const extractTypeFromElement = (
       const argumentName = (elem.children[0] as ArgumentElement).value
       // simplify <?>{elem}</?> to {elem}
       return left({
-        type: "replace_tag_and_argument_with_argument",
+        type: "replaceComplexTag",
         key,
         tagName,
         argumentName,
@@ -85,23 +93,18 @@ const extractTypeFromElement = (
      */
     if (!("other" in elem.options)) {
       return left({
-        type: "missing_other_branch",
+        type: "missingOtherBranch",
         path: key,
       })
-      // throw Error(
-      //   `Select statement in key "${key}" is missing a required "other" case. If the pattern is meant to be exhaustive use "other {}" to ignore other values. For more context check https://github.com/format-message/format-message/issues/320`
-      // )
     }
 
     const rawOptions = Object.keys(elem.options)
-    const cases = rawOptions
-      .filter(key => key !== "other")
-      .map(key => JSON.stringify(key))
+    const cases = rawOptions.filter(key => key !== "other")
 
     const hasStrictInputs = Object.entries(elem.options).some(
       ([key, { value }]) => key === "other" && value.length === 0
     )
-    out[elem.value] = hasStrictInputs ? cases.join(" | ") : STRING_TYPE
+    out[elem.value] = hasStrictInputs ? cases : STRING_TYPE
 
     const errors = Object.values(elem.options).map(parseOutBranchesImpurely)
     for (const err of errors) {
@@ -109,7 +112,6 @@ const extractTypeFromElement = (
         return left(err)
       }
     }
-    !selectCaseHasO
   } else if (elem.type === TYPE.date) {
     // This should really never be used but whatever
     out[elem.value] = DATE_TYPE
@@ -131,8 +133,8 @@ const extractTypeFromElement = (
 export function parseTypes(
   icu: string,
   key: string
-): Either<TypeGenerationError, Types> {
-  let out: Types = {}
+): Either<ParseErrorWithoutFile, TranslationArguments> {
+  let out: TranslationArguments = {}
   const parseResult = parse(icu)
   for (const elem of parseResult) {
     const result = extractTypeFromElement(elem, key)
@@ -144,39 +146,28 @@ export function parseTypes(
   return right(out)
 }
 
-function serializeTypes(obj: Record<string, string>) {
-  return `{
-      ${Object.entries(obj).map(([key, value]) => `"${key}": ${value}`)}
-    }`
+type PreparedTypings = {
+  file: string
+  declarations: Record<string, string>
 }
 
+export type TranslationTypes = Record<string, TranslationArguments>
+
 export async function generateAllTypings(
-  generatedTranslations: Record<string, string>,
-  typingsOutput: string
-) {
-  const types: Record<string, Types> = {}
-  for (const [key, value] of Object.entries(generatedTranslations)) {
-    const result = parseTypes(value, key)
-    if (isLeft(result)) {
-      return result
+  generatedTranslations: PreparedTypings[]
+): Promise<Either<ParseError, TranslationTypes>> {
+  const types: TranslationTypes = {}
+  for (const { file, declarations } of generatedTranslations) {
+    for (const [key, value] of Object.entries(declarations)) {
+      const result = parseTypes(value, key)
+      if (isLeft(result)) {
+        return left({
+          ...result.left,
+          file,
+        })
+      }
+      types[key] = result.right
     }
-    types[key] = result.right
   }
-  const body = Object.entries(types)
-    .map(([key, value]) => {
-      const hasTypes = Object.keys(value).length > 0
-      return `  "${key}": ${hasTypes ? serializeTypes(value) : "never"};`
-    })
-    .join("\n")
-  const out = format(
-    `
-    import { ReactNode } from "react";
-    export type TagMapper = (...input: any[]) => ReactNode;
-    export interface TranslationArguments {
-      ${body}
-    }
-  `,
-    { semi: true, parser: "typescript" }
-  )
-  await fs.writeFile(typingsOutput, out)
+  return right(types)
 }

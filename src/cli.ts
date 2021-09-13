@@ -1,20 +1,12 @@
-import { command, option, optional, positional, string } from "cmd-ts"
-import { isLeft, isRight } from "fp-ts/lib/Either"
+import { command, option, string } from "cmd-ts"
+import { isLeft } from "fp-ts/lib/Either"
 import { promises as fs } from "fs"
-import { join } from "path"
+import { join, resolve } from "path"
 import { injectLanguageToOutput, writeTranslations } from "./fs"
 import { logger } from "./logger"
-import {
-  generateTranslations,
-  TranslationGenerationError,
-  Translations,
-} from "./translation"
+import { generateTranslations, TranslationGenerationError } from "./translation"
+import { generateTypings } from "./typegen"
 import { DiscriminateUnion } from "./utils"
-
-const SOURCE_FOLDER = "en"
-const GENERATED_NAME = "_generated.json"
-const TRANSLATION_ROOT = "react/translations"
-const TYPINGS_NAME = "_generated.d.ts"
 
 const app = command({
   name: "process translations",
@@ -82,12 +74,12 @@ const app = command({
       await writeTranslations(outputPath.right, defaultedTranslations)
     }
     if (declarations) {
-      const base = await fs.readFile(
-        join(input, source, GENERATED_NAME),
-        "utf-8"
-      )
+      const destination = resolve(declarations)
+
       console.log(`⌨️️  Generating typings...`)
-      await generateAllTypings(JSON.parse(base))
+      // await generateTypings(englishTranslations.right, {
+      //   destination,
+      // })
     }
     console.log("🎌 Generated all translations!")
     process.exit(0)
@@ -96,23 +88,27 @@ const app = command({
 
 type Formatters = {
   [T in TranslationGenerationError["type"]]: (
-    error: DiscriminateUnion<TranslationGenerationError, "type", T>
+    error: Omit<
+      DiscriminateUnion<TranslationGenerationError, "type", T>,
+      "type"
+    >
   ) => string
 }
 
 export const errorFormatters: Formatters = {
-  clashing_key(err) {
-    return ""
-  },
-  empty_object(err) {
-    return ""
-  },
-  invalid_json_file() {
-    return ""
-  },
-  unexpected_value() {
-    return ""
-  },
+  clashingKey: err =>
+    `Top-level key "${err.keyPath}" in ${err.reusedIn} already exists in ${err.declaredIn}.\nNamespaces in json files must be unique across every file in a language folder`,
+  emptyObject: err =>
+    `Found an empty object in [${err.file}] on key '${err.path}'.\nNested namespaces in translation files must have at least one key-value pair.`,
+  unexpectedValue: err =>
+    `Found an unexpected key-value pair in [${err.file}] '${err.path}: ${err.value}'`,
+  invalidJsonFile: err =>
+    `JSON file in '${err.file}' is not valid\n${err.contents}`,
+  missingOtherBranch: err =>
+    `Select statement in key "${err.path}" is missing a required "other" case.\nIf the pattern is meant to be exhaustive use "other {}" to ignore other values. For more context check https://github.com/format-message/format-message/issues/320`,
+  replaceComplexTag: err =>
+    `Translation source '${err.key}' in [${err.file}] has tag input <${err.tagName}>{${err.argumentName}}</${err.tagName}> that can be reduced to {${err.argumentName}}.\nVariables can already be values wrapped around React components.`,
+  typeGenerationError: err => `Failed to generate types: ${err.message}`,
 }
 
 export default app
