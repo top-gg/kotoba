@@ -22,8 +22,6 @@ jobs:
       - name: Install dependencies
         run: yarn
       - name: Compile typescript
-        uses: iCrawl/action-tsc@v1
-        with:
-          job-name: Compiling Typescript
+        run: yarn build
       - name: Run tests
         run: yarn test --passWithNoTests
