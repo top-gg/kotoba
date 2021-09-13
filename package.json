@@ -14,15 +14,13 @@
   "dependencies": {
     "@formatjs/icu-messageformat-parser": "^2.0.11",
     "cmd-ts": "^0.7.0",
-    "dotenv": "^10.0.0",
     "fast-glob": "^3.2.7",
     "fp-ts": "^2.11.1",
-    "glob": "^7.1.7",
-    "lodash": "^4.17.21",
-    "make-promises-safe": "^5.1.0",
-    "react": "^17.0.2",
     "typescript": "^4.4.3",
     "winston": "^3.2.1"
+  },
+  "peerDependencies": {
+    "react": "^17.0.2"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.49",
